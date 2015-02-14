@@ -1,6 +1,6 @@
 
 CC = gcc
-CFLAGS = -Wall -g
+CFLAGS = -Wall -O2
 LIBS =
 
 BLACKSOCKS = blacksocks
@@ -13,22 +13,26 @@ all: $(BLACKSOCKS)
 
 OBJS =
 OBJS += dns.o
+OBJS += option.o
 OBJS += cache.o
 OBJS += common.o
 
-
 BLACKSOCKS_OBJS = $(OBJS)
-BLACKSOCKS_OBJS += socks5.o
+BLACKSOCKS_OBJS += blacksocks.o
 
-dns.o: utils.c dns.c dns.h
-socks5.o: utils.c socks5.c socks5.h
-#connect.o: connect.c connect.h
-cache.o: utils.c cache.c cache.h
+dns.o: utils.c dns.c common.h
+option.o: option.c common.h
+blacksocks.o: utils.c blacksocks.c common.h
+cache.o: utils.c cache.c common.h
 common.o: common.c common.h
-
 
 $(BLACKSOCKS): $(BLACKSOCKS_OBJS)
 	$(CC) $(CFLAGS) $^ -o $@ $(LIBS)
+
+install: all
+	cp blacksocks /usr/local/bin/
+	cp debian/blacksocks.init /etc/init.d/blacksocks
+	cp debian/blacksocks.conf /etc/
 
 .PHONY : clean
 clean:

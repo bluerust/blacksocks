@@ -6,9 +6,11 @@ This is a fast SOCKS5 server with built-in Asynchronous dns resolver.
 ## Usage
 
 make
+sudo make install
 
-./blacksocks
+modify /etc/blacksocks.conf if needed.
 
+run `/etc/init.d/blacksocks start`
 
 ## Features
 

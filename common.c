@@ -11,7 +11,10 @@
  */
 
 #include "common.h"
+#include <stdarg.h>
+#include <assert.h>
 
+static size_t strlcpy(char *dst, char *src, size_t size);
 
 /* connect to host:serv, return socket file descriptor, -1 on error */
 int udp_connect(const char *host)
@@ -196,4 +199,84 @@ int tcp_connect(const char *host, const char *serv)
 
     freeaddrinfo(res);
     return sockfd;
+}
+
+
+void log_debug(char *fmt, ...)
+{
+    va_list ap;
+    char buf[LOG_BUFSIZE];
+    char tempbuf[LOG_BUFSIZE];
+    char *bp;
+    int i;
+    char *p, *sval;
+    int ival;
+
+    memset(buf, 0, sizeof(buf));
+    memset(tempbuf, 0, sizeof(tempbuf));
+    bp = buf;
+    va_start(ap, fmt);
+
+    i = 0;
+    for (p = fmt; *p; p++ ) {
+        if (i >= (LOG_BUFSIZE - 2)) {
+            static char warning[] = "... [too long, truncated]";
+            i = LOG_BUFSIZE - sizeof(warning) -1;
+            i += strlcpy(bp + i, warning, LOG_BUFSIZE - i);
+            assert(i < LOG_BUFSIZE);
+            break;
+        }
+
+        sval = tempbuf;
+        if (*p != '%') {
+            buf[i++] = *p;
+            buf[i] = '\0';
+            continue;
+        }
+
+        switch (*++p) {
+        case '%':
+            tempbuf[0] = '%';
+            tempbuf[1] = '\0';
+            break;
+        case 'd':
+            ival = va_arg(ap, int);
+            snprintf(tempbuf, sizeof(tempbuf), "%d", ival);
+            break;
+        case 's':
+            sval = va_arg(ap, char *);
+            if (sval == NULL)
+                sval = "[null]";
+            break;
+        default:
+            snprintf(tempbuf, sizeof(tempbuf), "Bad format string: \"%s\"", fmt);
+            break;
+        }
+
+        assert(i < LOG_BUFSIZE);
+        i += strlcpy(bp + i, sval, LOG_BUFSIZE - i);
+    }
+    va_end(ap);
+    assert(i < LOG_BUFSIZE);
+    //i += strlcpy(bp + i, "\n", LOG_BUFSIZE -i);
+
+    if ((i >= LOG_BUFSIZE) || buf[LOG_BUFSIZE - 1] != '\0') {
+        snprintf(bp, LOG_BUFSIZE,
+                "Fatal error: log_debug() sanity checks failed.\n");
+    }
+
+    if (cw_daemon->logfp != NULL) {
+        fputs(buf, cw_daemon->logfp);
+        fflush(cw_daemon->logfp);
+    }
+}
+
+static size_t strlcpy(char *dst, char *src, size_t size)
+{
+    if (size > 0) {
+        snprintf(dst, size, "%s", src);
+        dst[size - 1] = '\0';
+    }
+
+    return strlen(src);
 }

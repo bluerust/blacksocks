@@ -11,30 +11,28 @@
  * Please send bug reports and questions to Chen Wei <weichen302@gmail.com>
  */
 
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "dns.h"
-#include "cache.h"
-#include "socks5.h"
+#include <sys/types.h>
+#include <netdb.h>
+#include <arpa/inet.h>
 #include "common.h"
 #include "utils.c"
+
 
 //TODO: add error check
 #define MAX_QUESTION 1024
 #define UDP_BUFSIZE 2048
 #define MAX_DNSMSG  2048
 
-extern int epfd;
 
-int format_domain_name(Byte *domain, char *hostname);
-ssize_t parse_rr(Byte *buf, size_t bufsize, in_port_t port,
+static size_t dns_fill_buf(Byte *buf, char *hostname);
+static int format_domain_name(Byte *domain, char *hostname);
+static ssize_t parse_rr(Byte *buf, size_t bufsize, in_port_t port,
                  struct addrinfo **res, uint32_t *ttd);
-ssize_t parse_udp_buf(Byte *buf, size_t bufsize, in_port_t port,
+static ssize_t parse_udp_buf(Byte *buf, size_t bufsize, in_port_t port,
                       struct addrinfo **addr, uint32_t *ttd);
-void log_debug(char *msg);
-
 
 /* the cache is in cache.c */
 extern struct dns_cache_node *dns_cache[];
@@ -61,7 +59,7 @@ struct dns_rr {
     uint16_t rr_len; // resource data length
 };
 
-size_t dns_fill_buf(Byte *buf, char *hostname)
+static size_t dns_fill_buf(Byte *buf, char *hostname)
 {
     Byte *b, *p;
     struct dns_header header;
@@ -71,7 +69,7 @@ size_t dns_fill_buf(Byte *buf, char *hostname)
     memset(&header, 0, sizeof(header));
     memset(&question, 0, sizeof(question));
 
-    header.id = htons(77);
+    getrandom_n(&(header.id), 2);
     header.flags = htons(0x100);
     header.nqes  = htons(1);
 
@@ -97,7 +95,7 @@ size_t dns_fill_buf(Byte *buf, char *hostname)
     return b - p;
 }
 
-ssize_t parse_udp_buf(Byte *buf, size_t bufsize, in_port_t port,
+static ssize_t parse_udp_buf(Byte *buf, size_t bufsize, in_port_t port,
                       struct addrinfo **addr, uint32_t *ttd)
 {
     Byte *b;
@@ -144,7 +142,7 @@ ssize_t parse_udp_buf(Byte *buf, size_t bufsize, in_port_t port,
     return 0;
 }
 
-ssize_t parse_rr(Byte *buf, size_t bufsize, in_port_t port,
+static ssize_t parse_rr(Byte *buf, size_t bufsize, in_port_t port,
                  struct addrinfo **res, uint32_t *ttd)
 {
     struct in_addr addr;
@@ -214,11 +212,6 @@ ssize_t parse_rr(Byte *buf, size_t bufsize, in_port_t port,
 }
 
 
-void log_debug(char *msg)
-{
-    fprintf(stderr, msg);
-}
-
 /* store result in res if cache hit, otherwise just send udp request,
  * wait for epoll to wake up read_dns_udp_reply to actually get result
  *
@@ -244,13 +237,14 @@ int cw_getaddrinfo(char *hostname, char *service, struct addrinfo **res)
 
     memset(&buf, 0, sizeof(buf));
     size = dns_fill_buf(buf, hostname);
-    dnsfd = udp_connect(DNS_SERVER);
+    dnsfd = udp_connect(cw_daemon->DNS_SERVER);
     if (dnsfd == -1) {
         log_debug("socket connect fail\n");
         return -1;
     }
 
     //printf("dns udp fd= %d\n", dnsfd);
+    //TODO make send dns nonb
     err = send(dnsfd, &buf, size, 0);
     if (err == -1) {
         log_debug("fail to send dns query\n");
@@ -269,11 +263,11 @@ ssize_t read_dns_udp_reply(struct client_ctx *ctx, struct addrinfo **res)
 {
     Byte inbuf[MAX_DNSMSG];
     ssize_t err;
-    uint32_t ttd;
     int dnsfd;
+    uint32_t ttd = 0;
 
     *res = NULL;
-    dnsfd = ctx->client_fd;
+    dnsfd = ctx->remote_fd;
     memset(&inbuf, 0, sizeof(inbuf));
     err = recv(dnsfd, &inbuf, sizeof(inbuf), 0);
     if (err == -1) {
@@ -288,11 +282,11 @@ ssize_t read_dns_udp_reply(struct client_ctx *ctx, struct addrinfo **res)
 
     err = parse_udp_buf(inbuf, err, ctx->sin_port, res, &ttd);
     if (err == -1) {
+        printf("%s\n", (char *) inbuf);
         log_debug("fail to parse dns query result\n");
         return -1;
     }
 
-    printf("install dns for %s\n", ctx->fqdn);
     install_dns_cache(ctx->fqdn, *res, ttd);
     return 0;
 }
@@ -324,7 +318,7 @@ void cw_freeaddrinfo(struct addrinfo *res)
 
 
 /* format www.yahoo.com as 3www5yahoo3com */
-int format_domain_name(Byte *domain, char *hostname)
+static int format_domain_name(Byte *domain, char *hostname)
 {
     int i, n;
     Byte *b, *p;

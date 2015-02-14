@@ -16,7 +16,6 @@
 
 #define max(A, B) ((A) > (B) ? (A) : (B))
 
-cw_inline uint32_t fnv_32_str(char *str);
 cw_inline void *cw_realloc(void *ptr, size_t size);
 
 #define cw_malloc(size) cw_realloc(NULL, size)
@@ -34,10 +33,11 @@ cw_inline void *cw_realloc(void *ptr, size_t size)
 #define MASK_16 (((u_int32_t)1<<16)-1)
 #define FNV1_32A_INIT ((uint32_t)0x811c9dc5)
 #define FNV_32_PRIME  ((uint32_t)0x01000193)
-#define strhash(s) fnv_32_str(s)
+#define strhash(s) fnv_32_hash(s)
+#define fnv_32_str(s) fnv_32_hash(s)
 
 /* fnv_32_str - perform a 32 bit Fowler/Noll/Vo hash on a string */
-static inline uint32_t fnv_32_str(char *str)
+static inline uint32_t fnv_32_hash(char *str)
 {
     uint32_t hval;
     unsigned char *s = (unsigned char *)str;        /* unsigned string */
@@ -49,5 +49,30 @@ static inline uint32_t fnv_32_str(char *str)
     }
 
     return hval;
+}
+
+/* the modified Bernstein hash, return an odd number for double hash */
+static inline unsigned int bernstein_hash(char *key)
+{
+    unsigned char *s = (unsigned char *) key;
+    unsigned int h = 0;
+
+    while (*s)
+        h = 33 * h ^ *s++;
+    //for(i = 0; i < keylen; i++)
+        //h = 33 * h ^ p[i];
+
+    return h % 2 ? h : h + 1;
+}
+
+/* get n(size) bytes of random data, store begin at ptr */
+static inline int getrandom_n(void *ptr, size_t size)
+{
+    int fd, nread;
+
+    fd = open("/dev/urandom", O_RDONLY);
+    nread = read(fd, ptr, size);
+
+    return nread;
 }
 

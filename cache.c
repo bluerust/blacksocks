@@ -20,22 +20,18 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <time.h>
-#include "cache.h"
 #include "common.h"
 #include "utils.c"
 
 extern struct dns_cache_node *dns_cache[];
 
-void free_dns_cache_node(struct dns_cache_node *np);
-void remove_expired_dns_cache(int idx);
+static void free_dns_cache_node(struct dns_cache_node *np);
+static void remove_expired_dns_cache(int idx);
 
-void install_dns_cache(char *fqdn, struct addrinfo *addr, uint32_t ttd);
+static struct dns_cache_node *addr2cache(char *fqdn, struct addrinfo *addr, uint32_t ttd);
+static struct addrinfo *cache2addr(struct dns_cache_node *dc, char *service);
 
-struct dns_cache_node *addr2cache(char *fqdn, struct addrinfo *addr, uint32_t ttd);
-struct addrinfo *cache2addr(struct dns_cache_node *dc, char *service);
-
-
-void free_dns_cache_node(struct dns_cache_node *np)
+static void free_dns_cache_node(struct dns_cache_node *np)
 {
     free(np->fqdn);
     free(np->sin_addrs);
@@ -76,7 +72,7 @@ struct addrinfo *lookup_dns_cache(char *fqdn, char *service)
 
 
 /* convert the cached item back to addrinfo */
-struct addrinfo *cache2addr(struct dns_cache_node *dc, char *service)
+static struct addrinfo *cache2addr(struct dns_cache_node *dc, char *service)
 {
     struct addrinfo *res, *rp, *rtmp;
     struct sockaddr_in *tmp;
@@ -85,9 +81,11 @@ struct addrinfo *cache2addr(struct dns_cache_node *dc, char *service)
     res = NULL;
     for (i = 0; i < dc->acount; i++) {
         rp = cw_malloc(sizeof(struct addrinfo));
+        memset(rp, 0, sizeof(struct addrinfo));
         tmp = cw_malloc(sizeof(struct sockaddr_in));
+        memset(tmp, 0, sizeof(struct sockaddr_in));
         tmp->sin_family = AF_INET;
-        memcpy(&(tmp->sin_addr), &(dc->sin_addrs[i]), sizeof(struct sockaddr));
+        tmp->sin_addr.s_addr = dc->sin_addrs[i].s_addr;
         tmp->sin_port = htons(atoi(service));
         rp->ai_addr = (struct sockaddr *) tmp;
         rp->ai_family = AF_INET;
@@ -108,7 +106,7 @@ struct addrinfo *cache2addr(struct dns_cache_node *dc, char *service)
     return res;
 }
 
-struct dns_cache_node *addr2cache(char *fqdn, struct addrinfo *addr, uint32_t ttd)
+static struct dns_cache_node *addr2cache(char *fqdn, struct addrinfo *addr, uint32_t ttd)
 {
     struct dns_cache_node *dc;
     struct addrinfo *np;
@@ -119,17 +117,19 @@ struct dns_cache_node *addr2cache(char *fqdn, struct addrinfo *addr, uint32_t tt
         i++;
 
     dc = cw_malloc(sizeof(struct dns_cache_node));
+    memset(dc, 0, sizeof(struct dns_cache_node));
     dc->next = NULL;
     dc->fqdn = strdup(fqdn);
     dc->hash = 0;
     dc->ttd = ttd;
     dc->acount = i;
     dc->sin_addrs = cw_malloc(dc->acount * sizeof(struct in_addr));
+    memset(dc->sin_addrs, 0, dc->acount * sizeof(struct in_addr));
 
     i = 0;
     for (np = addr; np != NULL; np = np->ai_next) {
         tmp = (struct sockaddr_in *) np->ai_addr;
-        memcpy(&(dc->sin_addrs[i++]), &(tmp->sin_addr), sizeof(struct in_addr));
+        dc->sin_addrs[i++].s_addr = tmp->sin_addr.s_addr;
     }
 
     tmp = (struct sockaddr_in *) addr->ai_addr;
@@ -139,7 +139,7 @@ struct dns_cache_node *addr2cache(char *fqdn, struct addrinfo *addr, uint32_t tt
 }
 
 /* remove cached dns items based on their time to die value */
-void remove_expired_dns_cache(int idx)
+static void remove_expired_dns_cache(int idx)
 {
     struct dns_cache_node *np, *child;
     uint32_t now;
