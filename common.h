@@ -1,5 +1,4 @@
 /* common.h
- * common socket routin
  *
  * Copyright 2015, Chen Wei <weichen302@gmail.com>
  *
@@ -119,25 +118,17 @@ struct wire_buffer {
 
 struct client_ctx {
     struct client_ctx *parent;
-    struct client_ctx *prev_expired;
-    struct client_ctx *next_expired;
-    struct client_ctx *prev;
-    struct client_ctx *next;
-
-    struct client_ctx *child_remote;
-    struct client_ctx *child_client;
-
-    int client_fd;
-    int remote_fd;
+    struct client_ctx *prev_expired, *next_expired;
+    struct client_ctx *prev, *next;
+    struct client_ctx *child_remote, *child_client;
+    int client_fd, remote_fd;
     int fd;
-
     char *fqdn;
     in_port_t sin_port;
     uint8_t flag;
     struct wire_buffer *to;  // from client to remote
     struct wire_buffer *fr;
-    struct handshake_buffer *hs_in;
-    struct handshake_buffer *hs_out;
+    struct handshake_buffer *hs_in, *hs_out;
 
     int ttd;
 };

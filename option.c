@@ -1,3 +1,17 @@
+/* option.c
+ *
+ * parse config file
+ *
+ * Copyright 2015, Chen Wei <weichen302@gmail.com>
+ *
+ * License GPLv3: GNU GPL version 3
+ * This is free software: you are free to change and redistribute it.
+ * There is NO WARRANTY, to the extent permitted by law.
+ *
+ * Please send bug reports and questions to Chen Wei <weichen302@gmail.com>
+ */
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -5,11 +19,8 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <ctype.h>
-//#include "utils.c"
 #include "common.h"
 
-
-//extern struct cw_runtime *cw_daemon;
 
 struct option {
     const char *name;
