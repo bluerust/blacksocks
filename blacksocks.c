@@ -36,9 +36,9 @@ static void write_wire(struct epoll_event *ev, struct client_ctx *cli);
 static void epoll_errhup(struct epoll_event *ev);
 
 static void socks_hs_hello_1(struct client_ctx *ctx);
-static void  socks_hs_hello_1_reply(struct client_ctx *ctx);
+static void socks_hs_hello_1_reply(struct client_ctx *ctx);
 static void socks_hs_hello_2(struct client_ctx *ctx);
-static int socks_hs_hello_2_getrmtaddr(struct client_ctx *cli,
+static int  socks_hs_hello_2_getrmtaddr(struct client_ctx *cli,
                                        struct addrinfo **res);
 static void socks_hs_hello_2_wakeupdns(struct client_ctx *dnsctx);
 static int  socks_hs_hello_2_nonbconnrmt(struct client_ctx *ctx,
@@ -47,7 +47,6 @@ static int  socks_hs_hello_2_rmtconn_verify(struct client_ctx *cli);
 static int  socks_hs_hello_2_reply(struct client_ctx *cli);
 static inline void main_loop(void);
 static void daemon_init(void);
-
 static void socks5_server(struct epoll_event *ev);
 
 /* -------------------- context --------------------- */
@@ -56,12 +55,12 @@ static inline void mark_for_delete(struct client_ctx *ctx);
 static inline void delete_expired_ctx(void);
 
 static void create_install_client_ctx(int clientfd, int remotefd);
-static void create_install_dns_ctx(int dnsfd, struct client_ctx *cli, in_port_t port,
-                            char *hostname);
+static void create_install_dns_ctx(int dnsfd, struct client_ctx *cli,
+                                   in_port_t port, char *hostname);
 
 static inline void uninstall_cli_ctx(struct client_ctx *ctx);
 static inline void free_ctx(struct client_ctx *ctx);
-static void garbage_ctx(void);
+static inline void garbage_ctx(void);
 /* -------------------- end context --------------------- */
 
 cw_inline void clear_handshake_buf(struct handshake_buffer *buf);
@@ -80,7 +79,6 @@ cw_inline void epoll_ctl_wrap(int op, int fd, int type, void *ptr)
     }
 }
 
-
 static void install_ctx(struct client_ctx *ctx)
 {
     int i;
@@ -94,7 +92,6 @@ static void install_ctx(struct client_ctx *ctx)
         ctx->next->prev = ctx;
         cw_daemon->known_ctx[i] = ctx;
     }
-
 }
 
 /* add to daemon->expired_ctx linked list, waiting for delete */
@@ -116,9 +113,7 @@ static inline void mark_for_delete(struct client_ctx *ctx)
         cw_daemon->expired_ctx->prev_expired = ctx;
         cw_daemon->expired_ctx = ctx;
     }
-
 }
-
 
 /* delete all ctx in daemon->expired_ctx linked list */
 static inline void delete_expired_ctx(void)
@@ -164,8 +159,6 @@ static inline void free_ctx(struct client_ctx *ctx)
 {
     struct client_ctx *parent;
 
-    //printf("free_ctx: free ctx with remote_fd = %d\n", ctx->remote_fd);
-
     if (ctx->parent == NULL)
         parent = ctx;
     else
@@ -189,11 +182,10 @@ static inline void free_ctx(struct client_ctx *ctx)
 }
 
 /* wake up periodically to remove ttd ctx */
-static void garbage_ctx(void)
+static inline void garbage_ctx(void)
 {
     int i, now;
     struct client_ctx *ctx;
-    //int count = 0;
 
     now = (int) time(NULL);
     for (i = 0; i < cw_daemon->known_ctx_size; i++) {
@@ -202,12 +194,10 @@ static void garbage_ctx(void)
                 /* could delete ctx directly here, but then daemon->expired_ctx
                  * should be checked */
                 mark_for_delete(ctx);
-                //count++;
             }
         }
     }
 
-    //printf("  garbage done, mark %d ctx for remove\n", count);
     delete_expired_ctx();
     cw_daemon->garbage_time = GARBAGE_INTERVAL + (int)time(NULL);
 }
@@ -289,8 +279,8 @@ static void create_install_client_ctx(int clientfd, int remotefd)
 }
 
 
-static void create_install_dns_ctx(int dnsfd, struct client_ctx *cli, in_port_t port,
-                            char *hostname)
+static void create_install_dns_ctx(int dnsfd, struct client_ctx *cli,
+                                   in_port_t port, char *hostname)
 {
     struct client_ctx *dnsctx;
 
@@ -333,8 +323,8 @@ cw_inline void clear_handshake_buf(struct handshake_buffer *buf)
 }
 
 
-/* read client hello, prepare reply, but do not send yet, wait for the client
- * fd is available for write */
+/* read client hello, prepare reply, then call send reply. In the send reply
+ * routin, if fd is not ready for write, the fd will be added to epoll */
 static void socks_hs_hello_1(struct client_ctx *cli)
 {
     struct handshake_buffer *in, *out;
@@ -344,7 +334,6 @@ static void socks_hs_hello_1(struct client_ctx *cli)
 
     in = cli->hs_in;
     buf = in->buf;
-    //printf("\ndebug handshake: read from fd %d\n", cli->client_fd);
     nread = read(cli->client_fd, in->avail, in->left);
     if (nread == -1) {
         if (errno != EWOULDBLOCK) {
@@ -387,15 +376,14 @@ static void socks_hs_hello_1(struct client_ctx *cli)
     clear_handshake_buf(cli->hs_in);  // done with client hello msg
 
     cli->flag = REPLY_HELLO_1;
-    epoll_ctl_wrap(EPOLL_CTL_MOD, cli->client_fd, EPOLLOUT, cli);
+    socks_hs_hello_1_reply(cli);
 
     return;
 }
 
 
-/* wake by epoll client fd is good to write, send reply to client's first
- * hello msg
- */
+/* called or waked by epoll client fd is good to write, send reply to client's
+   first hello msg */
 static void socks_hs_hello_1_reply(struct client_ctx *cli)
 {
     struct handshake_buffer *out;
@@ -406,9 +394,11 @@ static void socks_hs_hello_1_reply(struct client_ctx *cli)
     buf= out->buf;
     nwritten = write(cli->client_fd, out->start, out->used);
     if (nwritten == -1) {
-        if (errno != EWOULDBLOCK) {
+        if (errno != EWOULDBLOCK)
             mark_for_delete(cli);
-        }
+        else
+            epoll_ctl_wrap(EPOLL_CTL_MOD, cli->client_fd,
+                                          EPOLLIN | EPOLLOUT, cli);
         return;
     } else if (nwritten > 0) {
         out->used -= nwritten;
@@ -422,7 +412,7 @@ static void socks_hs_hello_1_reply(struct client_ctx *cli)
         mark_for_delete(cli);
     } else {
         cli->flag = READ_HELLO_2;
-        epoll_ctl_wrap(EPOLL_CTL_MOD, cli->client_fd, EPOLLIN, cli);
+        //epoll_ctl_wrap(EPOLL_CTL_MOD, cli->client_fd, EPOLLIN, cli);
     }
 
     return;
@@ -444,7 +434,6 @@ static void socks_hs_hello_2(struct client_ctx *cli)
 
     in = cli->hs_in;
     buf = in->buf;
-    //printf("\ndebug handshake: read from fd %d\n", sfd);
     nread = read(cli->client_fd, in->avail, in->left);
     if (nread == -1) {
         if (errno != EWOULDBLOCK) {
@@ -508,10 +497,9 @@ static void socks_hs_hello_2(struct client_ctx *cli)
     struct addrinfo *rmtaddr = NULL;
     dnsfd = socks_hs_hello_2_getrmtaddr(cli, &rmtaddr);
 
-    if (dnsfd == 0) {
+    // cache hit
+    if (dnsfd == 0)
         socks_hs_hello_2_nonbconnrmt(cli, rmtaddr);
-        //epoll_ctl_wrap(cli->remote_fd, EPOLL_CTL_ADD, EPOLLIN | EPOLLOUT);
-    }
 
     cw_freeaddrinfo(rmtaddr);
     return;
@@ -540,7 +528,6 @@ static int socks_hs_hello_2_getrmtaddr(struct client_ctx *cli, struct addrinfo *
 
     *res = NULL;
     if (buf[3] == ATYP_IPV4) {
-        //printf("debug handshake: client hello detail, use ip addr\n");
         rp = cw_malloc(sizeof(struct addrinfo));
         tmp = cw_malloc(sizeof(struct sockaddr_in));
         if (rp == NULL || tmp == NULL) {
@@ -561,7 +548,6 @@ static int socks_hs_hello_2_getrmtaddr(struct client_ctx *cli, struct addrinfo *
     }
 
     if (buf[3] == ATYP_DOMAIN) {
-        //printf("debug handshake: client hello detail, use domain\n");
         fqdn_len = buf[4];
         memcpy_lower(&fqdn, &buf[5], (size_t)fqdn_len);
         fqdn[fqdn_len] = '\0';
@@ -598,7 +584,6 @@ static void socks_hs_hello_2_wakeupdns(struct client_ctx *dnsctx)
     if (err == DNSWOULDBLOCK)
         return;
 
-    //clictx = lookup_cli_ctx(dnsctx->remote_fd);
     clictx = dnsctx->child_client;
     // dns resolve finish, (fail or okay), close udp socket
     mark_for_delete(dnsctx);
@@ -710,7 +695,6 @@ static int socks_hs_hello_2_reply(struct client_ctx *cli)
                        cli->child_client);
         epoll_ctl_wrap(EPOLL_CTL_ADD, cli->remote_fd, EPOLLIN,
                        cli->child_remote);
-
     }
 
     return 0;
@@ -746,12 +730,7 @@ static void daemon_init(void)
         exit(EXIT_FAILURE);
     }
 
-    cw_daemon->logfp = fopen(LOGFILE, "a");
     cw_daemon->pidfile = PIDFILE;
-
-    char *s;
-    s = inet_ntoa(SERV_BIND_ADDR.sin_addr);
-    log_debug("listen on %s:%d\n", s, ntohs(SERV_BIND_ADDR.sin_port));
 
     if ((cw_daemon->epfd = epoll_create(1)) == -1) {
         perror("epoll_create");
@@ -775,10 +754,13 @@ int main(int argc, char *argv[])
 {
     FILE *fp;
     pid_t pid, sid;
+    char *s;
+
 
     daemon_init();
 
     if (argc == 1) {
+        cw_daemon->logfp = fopen(LOGFILE, "a");
         if ((pid = fork()) < 0) {
             log_debug("fork() error\n");
             exit(EXIT_FAILURE);
@@ -842,7 +824,13 @@ int main(int argc, char *argv[])
             exit(EXIT_FAILURE);
         }
 
+    } else {
+        // debug mode, output to console
+        cw_daemon->logfp = stdout;
     }
+
+    s = inet_ntoa(SERV_BIND_ADDR.sin_addr);
+    log_debug("listen on %s:%d\n", s, ntohs(SERV_BIND_ADDR.sin_port));
 
     while (1) {
         main_loop();
