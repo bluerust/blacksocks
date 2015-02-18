@@ -1,0 +1,42 @@
+#!/bin/sh
+# postinst script for blacksocks
+#
+
+set -e
+
+NAME=blacksocks
+WORKDIR=/var/run/$NAME
+LOGDIR=/var/log/$NAME
+
+case "$1" in
+    configure)
+        if [ ! -d $WORKDIR ]; then
+            mkdir -m 755 $WORKDIR;
+        fi
+
+        adduser --quiet --system --home $WORKDIR --no-create-home \
+        --ingroup nogroup --disabled-password blacksocks
+
+        chown -R blacksocks:adm $WORKDIR
+        chmod 755 $WORKDIR
+
+        if [ ! -d $LOGDIR ]; then
+            mkdir -m 755 $LOGDIR
+        fi
+        chown -R blacksocks:adm $LOGDIR
+        chmod 755 $LOGDIR
+
+    ;;
+
+    abort-upgrade|abort-remove|abort-deconfigure)
+
+    ;;
+
+    *)
+        echo "postinst called with unknown argument \`$1'" >&2
+        exit 1
+    ;;
+esac
+
+
+exit 0

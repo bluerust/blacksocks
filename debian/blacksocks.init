@@ -21,7 +21,7 @@ WORKDIR=/var/run/$NAME
 PIDDIR=$WORKDIR
 PIDFILE=$PIDDIR/$NAME.pid
 LOGDIR=/var/log/$NAME
-UID="CHANGE_UID_HERE"
+UID="blacksocks"
 GID="adm"
 DESC="Blacksocks daemon"
 
