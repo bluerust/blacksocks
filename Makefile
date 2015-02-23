@@ -31,8 +31,9 @@ $(BLACKSOCKS): $(BLACKSOCKS_OBJS)
 
 install: all
 	cp blacksocks /usr/local/bin/
-	cp debian/blacksocks.init /etc/init.d/blacksocks
 	cp debian/blacksocks.conf /etc/
+	cp debian/blacksocks.init /etc/init.d/blacksocks
+	cp debian/blacksocks.logrotate.d /etc/logrotate.d/blacksocks
 
 .PHONY : clean
 clean:

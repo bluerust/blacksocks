@@ -15,6 +15,7 @@
 #include <assert.h>
 
 static size_t strlcpy(char *dst, char *src, size_t size);
+static inline size_t get_log_timestamp(char *buf, size_t bufsize);
 
 /* connect to host:serv, return socket file descriptor, -1 on error */
 int udp_connect(const char *host)
@@ -201,6 +202,16 @@ int tcp_connect(const char *host, const char *serv)
     return sockfd;
 }
 
+static inline size_t get_log_timestamp(char *buf, size_t bufsize)
+{
+    time_t now = time(NULL);
+    struct tm tm_now;
+    size_t len;
+
+    tm_now = *localtime(&now);
+    len = strftime(buf, bufsize, "%Y-%m-%d %H:%M:%S ", &tm_now);
+    return len;
+}
 
 void log_debug(char *fmt, ...)
 {
@@ -211,13 +222,15 @@ void log_debug(char *fmt, ...)
     int i;
     char *p, *sval;
     int ival;
+    size_t tm_len;
 
     memset(buf, 0, sizeof(buf));
     memset(tempbuf, 0, sizeof(tempbuf));
     bp = buf;
     va_start(ap, fmt);
 
-    i = 0;
+    tm_len = get_log_timestamp(buf, sizeof(buf));
+    i = tm_len;
     for (p = fmt; *p; p++ ) {
         if (i >= (LOG_BUFSIZE - 2)) {
             static char warning[] = "... [too long, truncated]";
