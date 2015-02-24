@@ -78,9 +78,9 @@ case "$1" in
     ;;
 restart|reload|force-reload)
     echo -n "Restarting $DESC: "
-    stop
+    $0 stop
     sleep 1
-    start
+    $0 start
     ;;
 status)
     if [ ! -f $PIDFILE ]; then
